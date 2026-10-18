@@ -1,0 +1,53 @@
+name: TSK SMS (Android APK)
+
+# Dükkân telefonu için SMS kapısı uygulaması. 'sms-telefon/' değişince ya da elle başlatılınca derlenir,
+# imzalanır ve 'sms-telefon' ÖN SÜRÜMÜNE (pre-release) konur: TSK'nın internet güncellemesi ('latest') etkilenmez.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Sürüm (ör. 1.0)"
+        required: false
+        default: "1.0"
+  push:
+    branches: [main]
+    paths: ["sms-telefon/**", ".github/workflows/sms-apk.yml"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
+      - name: İmza anahtarı
+        env:
+          KS_B64: ${{ secrets.SMS_KEYSTORE_B64 }}
+        run: |
+          echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/tsksms.p12"
+          echo "SMS_KEYSTORE_FILE=$RUNNER_TEMP/tsksms.p12" >> "$GITHUB_ENV"
+      - name: Derle
+        working-directory: sms-telefon
+        env:
+          SMS_KEYSTORE_PASS: ${{ secrets.SMS_KEYSTORE_PASS }}
+          SMS_VERSION_NAME: ${{ github.event.inputs.version || '1.0' }}
+          SMS_VERSION_CODE: ${{ github.run_number }}
+        run: gradle --no-daemon assembleRelease
+      - name: APK'yı ön sürüme koy
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp sms-telefon/app/build/outputs/apk/release/app-release.apk TSK-SMS.apk
+          gh release view sms-telefon >/dev/null 2>&1 || \
+            gh release create sms-telefon --prerelease --latest=false --title "TSK SMS (telefon uygulaması)" \
+              --notes "Dükkân telefonu (Android) için SMS kapısı. TSK → Ayarlar → SMS."
+          gh release upload sms-telefon TSK-SMS.apk --clobber
