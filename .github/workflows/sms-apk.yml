@@ -42,7 +42,7 @@ jobs:
         working-directory: sms-telefon
         env:
           SMS_KEYSTORE_PASS: ${{ secrets.SMS_KEYSTORE_PASS }}
-          SMS_VERSION_NAME: ${{ github.event.inputs.version || '1.0' }}
+          SMS_VERSION_NAME: ${{ github.event.inputs.version || '1.1' }}
           SMS_VERSION_CODE: ${{ github.run_number }}
         run: gradle --no-daemon assembleRelease
       - name: APK'yı ön sürüme koy

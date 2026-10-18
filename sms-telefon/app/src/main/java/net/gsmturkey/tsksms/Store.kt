@@ -30,6 +30,15 @@ object Store {
 
     fun port(ctx: Context): Int = p(ctx).getInt("port", DEFAULT_PORT)
 
+    /** Bu kurulumun kalıcı kimliği: TSK telefonu ağda bulunca adresi değişse de aynı telefonu tanır. */
+    fun deviceId(ctx: Context): String {
+        val cur = p(ctx).getString("device_id", null)
+        if (!cur.isNullOrEmpty()) return cur
+        val id = java.util.UUID.randomUUID().toString().replace("-", "").take(16)
+        p(ctx).edit().putString("device_id", id).apply()
+        return id
+    }
+
     fun enabled(ctx: Context): Boolean = p(ctx).getBoolean("enabled", false)
 
     fun setEnabled(ctx: Context, on: Boolean) {

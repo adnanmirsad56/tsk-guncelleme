@@ -87,7 +87,8 @@ class MainActivity : Activity() {
             refresh()
         })
         root.addView(text(13f, color = Color.rgb(148, 163, 184)).apply {
-            text = "Telefon dükkândaki Wi-Fi'ye bağlı ve şarjda dursun. Bilgiler yalnız yerel ağda kullanılır."
+            text = "TSK'da Ayarlar → SMS → 'Telefonu bul' bu telefonu ağda kendiliğinden bulur (adres değişse de). " +
+                    "Telefon dükkândaki Wi-Fi'ye bağlı ve şarjda dursun. Bilgiler yalnız yerel ağda kullanılır."
         })
         root.addView(text(15f, true).apply { text = "Son gönderimler" })
         log = text(13f, color = Color.rgb(203, 213, 225))
