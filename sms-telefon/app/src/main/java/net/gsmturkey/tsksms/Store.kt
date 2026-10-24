@@ -54,6 +54,23 @@ object Store {
 
     fun logText(ctx: Context): String = p(ctx).getString("log", "") ?: ""
 
+    /** 1.2: son gönderilenler (tam numarayla, yalnız bu telefonda) — listeden dokununca Mesajlar'da açılır. */
+    fun addRecent(ctx: Context, to: String, text: String) {
+        val stamp = SimpleDateFormat("dd.MM HH:mm", Locale("tr")).format(Date())
+        val clean = text.replace("\n", " ").replace("\t", " ").take(60)
+        val old = p(ctx).getString("recent", "") ?: ""
+        val lines = ("$stamp\t$to\t$clean\n$old").lines().filter { it.isNotBlank() }.take(30)
+            .joinToString("\n")
+        p(ctx).edit().putString("recent", lines).apply()
+    }
+
+    /** [(zaman, numara, metin)] */
+    fun recent(ctx: Context): List<Triple<String, String, String>> =
+        (p(ctx).getString("recent", "") ?: "").lines().mapNotNull {
+            val parts = it.split("\t")
+            if (parts.size >= 3) Triple(parts[0], parts[1], parts[2]) else null
+        }
+
     fun count(ctx: Context): Int = p(ctx).getInt("sent", 0)
 
     fun addCount(ctx: Context) {

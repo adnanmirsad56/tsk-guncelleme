@@ -173,11 +173,14 @@ class GatewayService : Service() {
     private fun notification(): Notification {
         val nm = getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= 26) {
-            nm.createNotificationChannel(NotificationChannel("tsk", "TSK SMS", NotificationManager.IMPORTANCE_LOW))
+            // 1.2: uygulama simgesinde sürekli '1' rozeti görünmesin (kanal ayarı sonradan değişmediği için yeni kanal)
+            nm.deleteNotificationChannel("tsk")
+            nm.createNotificationChannel(NotificationChannel(CHANNEL, "TSK SMS", NotificationManager.IMPORTANCE_LOW)
+                .apply { setShowBadge(false) })
         }
         val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE)
-        val b = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, "tsk") else
+        val b = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, CHANNEL) else
             @Suppress("DEPRECATION") Notification.Builder(this)
         return b.setContentTitle("TSK SMS hazır")
             .setContentText("Dükkân programı bu telefondan SMS gönderebilir")
@@ -189,6 +192,7 @@ class GatewayService : Service() {
 
     companion object {
         private const val CHECK_MS = 60_000L
+        private const val CHANNEL = "tsk_service"
         const val READY_PORT = 47816
 
         fun start(ctx: Context, check: Boolean = false) {

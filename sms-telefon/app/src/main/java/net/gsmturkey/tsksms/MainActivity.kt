@@ -33,6 +33,8 @@ class MainActivity : Activity() {
     private lateinit var log: TextView
     private lateinit var toggle: Button
     private lateinit var battery: TextView
+    private lateinit var recentBox: LinearLayout
+    private var recentSig = ""
     private val ui = Handler(Looper.getMainLooper())
     private val tick = object : Runnable {
         override fun run() {
@@ -95,7 +97,10 @@ class MainActivity : Activity() {
             text = "TSK'da Ayarlar → SMS → 'Telefonu bul' bu telefonu ağda kendiliğinden bulur (adres değişse de). " +
                     "Telefon dükkândaki Wi-Fi'ye bağlı ve şarjda dursun. Bilgiler yalnız yerel ağda kullanılır."
         })
-        root.addView(text(15f, true).apply { text = "Son gönderimler" })
+        root.addView(text(15f, true).apply { text = "Son gönderimler (dokununca Mesajlar'da açılır)" })
+        recentBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        root.addView(recentBox)
+        root.addView(text(15f, true).apply { text = "Kayıt" })
         log = text(13f, color = Color.rgb(203, 213, 225))
         root.addView(log)
         setContentView(ScrollView(this).apply { addView(root); setBackgroundColor(Color.rgb(15, 23, 42)) })
@@ -181,5 +186,39 @@ class MainActivity : Activity() {
             (if (Autostart.needed()) "\n• ${Build.MANUFACTURER}: 'Otomatik başlatma' ekranında TSK SMS'i açın ve pil " +
                 "ayarını 'Kısıtlama yok' yapın." else "")
         battery.setTextColor(if (freeBattery) Color.rgb(34, 197, 94) else Color.rgb(245, 158, 11))
+        showRecent()
+    }
+
+    /** 1.2: son gönderilenler — satıra dokununca telefonun Mesajlar uygulamasında o kişinin yazışması açılır. */
+    private fun showRecent() {
+        val items = Store.recent(this)
+        val sig = items.joinToString("|") { it.first + it.second }
+        if (sig == recentSig) return                      // 2 sn'de bir yenilenir: değişmediyse yeniden kurulmaz
+        recentSig = sig
+        recentBox.removeAllViews()
+        if (items.isEmpty()) {
+            recentBox.addView(text(13f, color = Color.rgb(148, 163, 184)).apply { text = "Henüz gönderim yok." })
+            return
+        }
+        for ((stamp, to, msg) in items.take(15)) {
+            recentBox.addView(text(14f, color = Color.rgb(203, 213, 225)).apply {
+                text = "$stamp   $to\n$msg"
+                setPadding(dp(10), dp(8), dp(10), dp(8))
+                setBackgroundColor(Color.rgb(30, 41, 59))
+                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) }
+                isClickable = true
+                setOnClickListener { openConversation(to) }
+            })
+        }
+    }
+
+    private fun openConversation(number: String) {
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("sms:" + Uri.encode(number))))
+        } catch (_: Exception) {
+            try { startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:" + Uri.encode(number)))) }
+            catch (_: Exception) {}
+        }
     }
 }

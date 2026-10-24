@@ -89,6 +89,7 @@ class SmsServer(private val ctx: Context, private val port: Int) {
                         SmsSender.send(ctx, to, text, sim)
                         Store.addCount(ctx)
                         Store.log(ctx, "→ ${mask(to)}  ${text.take(40)}")
+                        Store.addRecent(ctx, to, text)          // 1.2: dokununca Mesajlar'da o yazışma açılır
                     }
                     return respond(out, 202, """{"state":"Pending"}""")
                 }
