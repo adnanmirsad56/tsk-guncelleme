@@ -9,6 +9,7 @@ class BootReceiver : BroadcastReceiver() {
     override fun onReceive(ctx: Context, intent: Intent) {
         if (Store.enabled(ctx)) {
             try { GatewayService.start(ctx) } catch (_: Exception) {}
+            Watchdog.schedule(ctx, 60_000)                  // 1.2: açılışta başlatılamazsa bekçi bir dakika sonra dener
         }
     }
 }

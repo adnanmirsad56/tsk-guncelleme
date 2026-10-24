@@ -32,6 +32,7 @@ class MainActivity : Activity() {
     private lateinit var creds: TextView
     private lateinit var log: TextView
     private lateinit var toggle: Button
+    private lateinit var battery: TextView
     private val ui = Handler(Looper.getMainLooper())
     private val tick = object : Runnable {
         override fun run() {
@@ -81,6 +82,10 @@ class MainActivity : Activity() {
         root.addView(toggle)
         root.addView(button("İzinleri ver (SMS, telefon, bildirim)") { askPermissions() })
         root.addView(button("Arka planda kapanmasın (pil ayarı)") { askBattery() })
+        // 1.2: Xiaomi / Oppo / Vivo … kendi pil yöneticisi: otomatik başlatma + 'kısıtlama yok'
+        root.addView(button("Otomatik başlatma / arka plan izni (Xiaomi, Oppo, Vivo…)") { Autostart.open(this) })
+        battery = text(13f, color = Color.rgb(148, 163, 184))
+        root.addView(battery)
         root.addView(button("Yeni şifre üret") {
             Store.newPassword(this)
             if (Store.enabled(this)) { GatewayService.stop(this); GatewayService.start(this) }
@@ -140,6 +145,8 @@ class MainActivity : Activity() {
             if (!hasSmsPermission()) { askPermissions(); return }
             Store.setEnabled(this, true)
             GatewayService.start(this)
+            if (Build.VERSION.SDK_INT >= 23 && !getSystemService(PowerManager::class.java)
+                    .isIgnoringBatteryOptimizations(packageName)) askBattery()     // 1.2: ilk başlatmada sorulur
         }
         refresh()
     }
@@ -167,5 +174,12 @@ class MainActivity : Activity() {
         creds.text = "Kullanıcı: ${Store.USER}     Şifre: ${Store.password(this)}"
         val perm = if (hasSmsPermission()) "" else "\n⚠ SMS izni verilmedi — 'İzinleri ver'e basın."
         log.text = "Gönderilen: ${Store.count(this)}$perm\n\n" + Store.logText(this)
+        val pm = getSystemService(PowerManager::class.java)
+        val freeBattery = Build.VERSION.SDK_INT < 23 || pm.isIgnoringBatteryOptimizations(packageName)
+        battery.text = (if (freeBattery) "✓ Pil kısıtlaması kaldırılmış" else
+            "⚠ Pil kısıtlaması açık — 'Arka planda kapanmasın'a basıp İzin ver deyin (yoksa SMS'ler gecikir)") +
+            (if (Autostart.needed()) "\n• ${Build.MANUFACTURER}: 'Otomatik başlatma' ekranında TSK SMS'i açın ve pil " +
+                "ayarını 'Kısıtlama yok' yapın." else "")
+        battery.setTextColor(if (freeBattery) Color.rgb(34, 197, 94) else Color.rgb(245, 158, 11))
     }
 }
