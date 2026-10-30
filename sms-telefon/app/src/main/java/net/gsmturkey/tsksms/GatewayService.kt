@@ -63,6 +63,7 @@ class GatewayService : Service() {
             multicast = wm.createMulticastLock("tsksms:find").apply { setReferenceCounted(false); acquire() }
             watchNetwork()
             main.postDelayed(selfCheck, CHECK_MS)
+            RemoteLink.start(this)                          // 1.4: eşleşmişse internet üzerinden de bağlan
         } else if (intent?.getBooleanExtra("check", false) == true) {
             checkServer()                                   // bekçi uyandırdı: sunucu gerçekten yanıt veriyor mu
         }
@@ -162,6 +163,7 @@ class GatewayService : Service() {
             catch (_: Exception) {}
         }
         closeServer()
+        RemoteLink.stop()
         try { multicast?.release() } catch (_: Exception) {}
         try { wake?.release() } catch (_: Exception) {}
         try { wifi?.release() } catch (_: Exception) {}
@@ -183,7 +185,8 @@ class GatewayService : Service() {
         val b = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, CHANNEL) else
             @Suppress("DEPRECATION") Notification.Builder(this)
         return b.setContentTitle("TSK SMS hazır")
-            .setContentText("Dükkân programı bu telefondan SMS gönderebilir")
+            .setContentText(if (Store.remote(this) != null) "Dükkân programı bu telefondan SMS gönderebilir (internetten de)"
+                            else "Dükkân programı bu telefondan SMS gönderebilir")
             .setSmallIcon(android.R.drawable.sym_action_email)
             .setContentIntent(open)
             .setOngoing(true)

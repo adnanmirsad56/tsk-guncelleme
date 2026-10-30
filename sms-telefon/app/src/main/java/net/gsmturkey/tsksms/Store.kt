@@ -71,6 +71,40 @@ object Store {
             if (parts.size >= 3) Triple(parts[0], parts[1], parts[2]) else null
         }
 
+    /** 1.4: internet üzerinden bağlantı (TSK'nın uzaktan erişim bağlantısından): köprü, oda, uçtan uca anahtar. */
+    data class Remote(val base: String, val room: String, val key: String, val shop: String)
+
+    fun remote(ctx: Context): Remote? {
+        val parts = (p(ctx).getString("remote", "") ?: "").split("\t")
+        if (parts.size < 3 || parts[0].isEmpty()) return null
+        return Remote(parts[0], parts[1], parts[2], parts.getOrElse(3) { "" })
+    }
+
+    fun setRemote(ctx: Context, r: Remote?) {
+        p(ctx).edit().putString("remote", if (r == null) "" else
+            listOf(r.base, r.room, r.key, r.shop.replace("\t", " ")).joinToString("\t")).apply()
+    }
+
+    /** TSK'dan gelen bağlantıyı çözer: https://<köprü>/#r=<oda>&k=<anahtar>&n=<dükkân> (WhatsApp metni içinde de). */
+    fun parseLink(text: String): Remote? {
+        val start = text.indexOf("http")
+        if (start < 0) return null
+        val link = text.substring(start).split(Regex("\\s")).first()
+        val hash = link.indexOf('#')
+        if (hash < 0) return null
+        val base = link.substring(0, hash).trimEnd('/')
+        val params = link.substring(hash + 1).split("&").mapNotNull {
+            val i = it.indexOf('=')
+            if (i <= 0) null else it.substring(0, i) to try {
+                java.net.URLDecoder.decode(it.substring(i + 1), "UTF-8")
+            } catch (_: Exception) { it.substring(i + 1) }
+        }.toMap()
+        val room = params["r"] ?: return null
+        val key = params["k"] ?: return null
+        if (!Regex("^[0-9a-f]{24}$").matches(room) || key.length < 20) return null
+        return Remote(base, room, key, params["n"] ?: "")
+    }
+
     fun count(ctx: Context): Int = p(ctx).getInt("sent", 0)
 
     fun addCount(ctx: Context) {

@@ -19,6 +19,7 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import java.net.Inet4Address
 import java.net.NetworkInterface
 
@@ -34,6 +35,8 @@ class MainActivity : Activity() {
     private lateinit var toggle: Button
     private lateinit var battery: TextView
     private lateinit var recentBox: LinearLayout
+    private lateinit var remoteStatus: TextView
+    private lateinit var remoteRemove: Button
     private var recentSig = ""
     private val ui = Handler(Looper.getMainLooper())
     private val tick = object : Runnable {
@@ -95,8 +98,25 @@ class MainActivity : Activity() {
         })
         root.addView(text(13f, color = Color.rgb(148, 163, 184)).apply {
             text = "TSK'da Ayarlar → SMS → 'Telefonu bul' bu telefonu ağda kendiliğinden bulur (adres değişse de). " +
-                    "Telefon dükkândaki Wi-Fi'ye bağlı ve şarjda dursun. Bilgiler yalnız yerel ağda kullanılır."
+                    "Telefon şarjda dursun."
         })
+        // 1.4: internet üzerinden (telefon dükkân Wi-Fi'sinde olmasa da, mobil veride de)
+        root.addView(text(17f, true).apply { text = "İnternet üzerinden (dükkân dışından)" })
+        root.addView(text(13f, color = Color.rgb(148, 163, 184)).apply {
+            text = "Telefon dükkân Wi-Fi'sinde değilken de SMS gönderilsin: TSK'da Ayarlar → Telefondan Erişim → " +
+                    "Uzaktan erişim → 'Adresi kopyala' ya da 'WhatsApp'la gönder' ile bağlantıyı bu telefona gönderin, " +
+                    "bağlantıyı kopyalayıp aşağıdaki düğmeye basın. Şifre TSK'daki SMS şifresiyle aynı olmalı. " +
+                    "Mesajlar uçtan uca şifrelidir."
+        })
+        remoteStatus = text(15f, true)
+        root.addView(remoteStatus)
+        root.addView(button("Bağlantıyı yapıştır (TSK'dan gelen)") { pasteRemote() })
+        remoteRemove = button("İnternet bağlantısını kaldır") {
+            Store.setRemote(this, null)
+            RemoteLink.stop()
+            refresh()
+        }
+        root.addView(remoteRemove)
         root.addView(text(15f, true).apply { text = "Son gönderimler (dokununca Mesajlar'da açılır)" })
         recentBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         root.addView(recentBox)
@@ -156,6 +176,22 @@ class MainActivity : Activity() {
         refresh()
     }
 
+    private fun pasteRemote() {
+        val cm = getSystemService(android.content.ClipboardManager::class.java)
+        val clip = try { cm?.primaryClip?.getItemAt(0)?.coerceToText(this)?.toString() ?: "" } catch (_: Exception) { "" }
+        val r = Store.parseLink(clip)
+        if (r == null) {
+            Toast.makeText(this, "Panoda TSK bağlantısı yok. TSK'dan gelen bağlantıyı (https://…#r=…&k=…) " +
+                    "kopyalayıp tekrar deneyin.", Toast.LENGTH_LONG).show()
+            return
+        }
+        Store.setRemote(this, r)
+        if (Store.enabled(this)) RemoteLink.restart(this) else RemoteLink.stop()
+        Toast.makeText(this, "Eşleşti" + (if (r.shop.isNotEmpty()) ": ${r.shop}" else "") +
+                (if (Store.enabled(this)) "" else " — 'Başlat'a basın"), Toast.LENGTH_LONG).show()
+        refresh()
+    }
+
     private fun localIp(): String {
         return try {
             NetworkInterface.getNetworkInterfaces().toList()
@@ -179,6 +215,15 @@ class MainActivity : Activity() {
         creds.text = "Kullanıcı: ${Store.USER}     Şifre: ${Store.password(this)}"
         val perm = if (hasSmsPermission()) "" else "\n⚠ SMS izni verilmedi — 'İzinleri ver'e basın."
         log.text = "Gönderilen: ${Store.count(this)}$perm\n\n" + Store.logText(this)
+        val r = Store.remote(this)
+        remoteStatus.text = when {
+            r == null -> "○ Eşleşmedi"
+            !on -> "○ Eşleşti" + (if (r.shop.isNotEmpty()) " (${r.shop})" else "") + " — 'Başlat'a basın"
+            else -> RemoteLink.state + (if (r.shop.isNotEmpty()) "\n${r.shop}" else "")
+        }
+        remoteStatus.setTextColor(if (r != null && on && RemoteLink.state.startsWith("✓")) Color.rgb(34, 197, 94)
+                                  else Color.rgb(148, 163, 184))
+        remoteRemove.visibility = if (r == null) android.view.View.GONE else android.view.View.VISIBLE
         val pm = getSystemService(PowerManager::class.java)
         val freeBattery = Build.VERSION.SDK_INT < 23 || pm.isIgnoringBatteryOptimizations(packageName)
         battery.text = (if (freeBattery) "✓ Pil kısıtlaması kaldırılmış" else
