@@ -42,15 +42,19 @@ jobs:
         working-directory: sms-telefon
         env:
           SMS_KEYSTORE_PASS: ${{ secrets.SMS_KEYSTORE_PASS }}
-          SMS_VERSION_NAME: ${{ github.event.inputs.version || '1.4' }}
+          SMS_VERSION_NAME: ${{ github.event.inputs.version || '1.5' }}
           SMS_VERSION_CODE: ${{ github.run_number }}
         run: gradle --no-daemon assembleRelease
       - name: APK'yı ön sürüme koy
         env:
           GH_TOKEN: ${{ github.token }}
+          SMS_VERSION_NAME: ${{ github.event.inputs.version || '1.5' }}
         run: |
           cp sms-telefon/app/build/outputs/apk/release/app-release.apk TSK-SMS.apk
+          # 1.5: uygulamanın kendi kendini güncellemesi için sürüm bilgisi (derleme no = versionCode)
+          printf '{"version": "%s", "code": %s, "url": "https://github.com/%s/releases/download/sms-telefon/TSK-SMS.apk"}\n' \
+            "$SMS_VERSION_NAME" "${{ github.run_number }}" "${{ github.repository }}" > sms-version.json
           gh release view sms-telefon >/dev/null 2>&1 || \
             gh release create sms-telefon --prerelease --latest=false --title "TSK SMS (telefon uygulaması)" \
               --notes "Dükkân telefonu (Android) için SMS kapısı. TSK → Ayarlar → SMS."
-          gh release upload sms-telefon TSK-SMS.apk --clobber
+          gh release upload sms-telefon TSK-SMS.apk sms-version.json --clobber

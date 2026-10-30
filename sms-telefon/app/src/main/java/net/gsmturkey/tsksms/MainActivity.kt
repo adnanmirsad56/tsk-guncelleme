@@ -36,6 +36,8 @@ class MainActivity : Activity() {
     private lateinit var battery: TextView
     private lateinit var recentBox: LinearLayout
     private lateinit var remoteStatus: TextView
+    private lateinit var updateText: TextView
+    private lateinit var updateBtn: Button
     private lateinit var remoteRemove: Button
     private var recentSig = ""
     private val ui = Handler(Looper.getMainLooper())
@@ -117,6 +119,12 @@ class MainActivity : Activity() {
             refresh()
         }
         root.addView(remoteRemove)
+        // 1.5: kendi kendini güncelleme
+        root.addView(text(17f, true).apply { text = "Güncelleme" })
+        updateText = text(14f, color = Color.rgb(203, 213, 225))
+        root.addView(updateText)
+        updateBtn = button("Güncellemeleri denetle") { updateClicked() }
+        root.addView(updateBtn)
         root.addView(text(15f, true).apply { text = "Son gönderimler (dokununca Mesajlar'da açılır)" })
         recentBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         root.addView(recentBox)
@@ -176,6 +184,21 @@ class MainActivity : Activity() {
         refresh()
     }
 
+    private fun updateClicked() {
+        val known = Updater.latest
+        Updater.status = if (known == null) "Denetleniyor…" else "İndiriliyor…"
+        refresh()
+        Thread({
+            val info = known ?: Updater.check(this)
+            if (info == null) {
+                Updater.status = "✓ Güncel (sürüm ${Updater.currentName(this)})"
+            } else {
+                Updater.downloadAndInstall(this, info)
+            }
+            runOnUiThread { refresh() }
+        }, "tsk-sms-update").start()
+    }
+
     private fun pasteRemote() {
         val cm = getSystemService(android.content.ClipboardManager::class.java)
         val clip = try { cm?.primaryClip?.getItemAt(0)?.coerceToText(this)?.toString() ?: "" } catch (_: Exception) { "" }
@@ -224,6 +247,11 @@ class MainActivity : Activity() {
         remoteStatus.setTextColor(if (r != null && on && RemoteLink.state.startsWith("✓")) Color.rgb(34, 197, 94)
                                   else Color.rgb(148, 163, 184))
         remoteRemove.visibility = if (r == null) android.view.View.GONE else android.view.View.VISIBLE
+        val up = Updater.latest
+        updateText.text = "Bu sürüm: ${Updater.currentName(this)}" +
+            (if (up != null) "\nYeni sürüm var: ${up.version}" else "") +
+            (if (Updater.status.isNotEmpty()) "\n${Updater.status}" else "")
+        updateBtn.text = if (up != null) "Güncelle (${up.version})" else "Güncellemeleri denetle"
         val pm = getSystemService(PowerManager::class.java)
         val freeBattery = Build.VERSION.SDK_INT < 23 || pm.isIgnoringBatteryOptimizations(packageName)
         battery.text = (if (freeBattery) "✓ Pil kısıtlaması kaldırılmış" else

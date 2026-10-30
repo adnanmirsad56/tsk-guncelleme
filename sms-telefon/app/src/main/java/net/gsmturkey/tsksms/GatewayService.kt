@@ -44,6 +44,37 @@ class GatewayService : Service() {
         }
     }
 
+    private val updateCheck = object : Runnable {
+        override fun run() {
+            Thread({
+                val info = Updater.check(this@GatewayService)
+                if (info != null) main.post { notifyUpdate(info) }
+            }, "tsk-sms-update").start()
+            main.postDelayed(this, UPDATE_MS)
+        }
+    }
+
+    /** 1.5: yeni sürüm bildirimi — dokununca uygulama açılır, 'Güncelle' ile kurulur. */
+    private fun notifyUpdate(info: Updater.Info) {
+        try {
+            val nm = getSystemService(NotificationManager::class.java)
+            if (Build.VERSION.SDK_INT >= 26) {
+                nm.createNotificationChannel(NotificationChannel(UPDATE_CHANNEL, "TSK SMS güncellemesi",
+                    NotificationManager.IMPORTANCE_DEFAULT))
+            }
+            val open = PendingIntent.getActivity(this, 2, Intent(this, MainActivity::class.java),
+                PendingIntent.FLAG_IMMUTABLE)
+            val b = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, UPDATE_CHANNEL) else
+                @Suppress("DEPRECATION") Notification.Builder(this)
+            nm.notify(2, b.setContentTitle("TSK SMS güncellemesi var (${info.version})")
+                .setContentText("Dokunun, 'Güncelle'ye basın")
+                .setSmallIcon(android.R.drawable.stat_sys_download_done)
+                .setContentIntent(open)
+                .setAutoCancel(true)
+                .build())
+        } catch (_: Exception) {}
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -64,6 +95,7 @@ class GatewayService : Service() {
             watchNetwork()
             main.postDelayed(selfCheck, CHECK_MS)
             RemoteLink.start(this)                          // 1.4: eşleşmişse internet üzerinden de bağlan
+            main.postDelayed(updateCheck, 30_000)           // 1.5: yeni sürüm denetimi (açılıştan 30 sn sonra, sonra 12 saatte bir)
         } else if (intent?.getBooleanExtra("check", false) == true) {
             checkServer()                                   // bekçi uyandırdı: sunucu gerçekten yanıt veriyor mu
         }
@@ -195,7 +227,9 @@ class GatewayService : Service() {
 
     companion object {
         private const val CHECK_MS = 60_000L
+        private const val UPDATE_MS = 12 * 60 * 60_000L
         private const val CHANNEL = "tsk_service"
+        private const val UPDATE_CHANNEL = "tsk_update"
         const val READY_PORT = 47816
 
         fun start(ctx: Context, check: Boolean = false) {
