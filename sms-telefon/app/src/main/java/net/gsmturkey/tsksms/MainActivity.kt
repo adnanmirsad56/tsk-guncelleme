@@ -2,6 +2,7 @@ package net.gsmturkey.tsksms
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -153,6 +154,35 @@ class MainActivity : Activity() {
         val want = mutableListOf(Manifest.permission.SEND_SMS, Manifest.permission.READ_PHONE_STATE)
         if (Build.VERSION.SDK_INT >= 33) want.add(Manifest.permission.POST_NOTIFICATIONS)
         requestPermissions(want.toTypedArray(), 7)
+    }
+
+    // 5 Kas 2026 (S23 Ultra): Play Store dışından kurulan uygulamaya Android 13+ SMS iznini "kısıtlanmış ayar" diye
+    // kapatıyor; izin penceresi hiç açılmıyor ya da "erişim reddedildi" diyor. Uygulama bu kilidi kendisi kaldıramaz:
+    // kullanıcıya adım adım yol gösterilir ve Uygulama bilgileri ekranı doğrudan açılır.
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 7 && !hasSmsPermission()) showRestrictedHelp()
+    }
+
+    private fun showRestrictedHelp() {
+        val steps = if (Build.VERSION.SDK_INT >= 33)
+            "SMS izni verilemedi. Android, Play Store dışından kurulan uygulamalarda bu izni kilitliyor. Kilidi açmak için:\n\n" +
+            "1) Aşağıdaki 'Uygulama bilgilerini aç' düğmesine basın.\n" +
+            "2) Sağ üstteki ⋮ (üç nokta) menüsüne dokunun.\n" +
+            "3) 'Kısıtlanmış ayarlara izin ver'e dokunun ve telefon şifrenizle onaylayın.\n" +
+            "4) Aynı ekranda İzinler → SMS → 'İzin ver'i seçin.\n" +
+            "5) TSK SMS'e geri dönün.\n\n" +
+            "⋮ menüsünde seçenek görünmüyorsa önce bir kez 'İzinler → SMS'e dokunup uyarıyı kapatın, sonra tekrar ⋮'e bakın."
+        else
+            "SMS izni verilemedi.\n\n1) 'Uygulama bilgilerini aç'a basın.\n2) İzinler → SMS → 'İzin ver'i seçin.\n3) TSK SMS'e geri dönün."
+        AlertDialog.Builder(this)
+            .setTitle("SMS izni gerekli")
+            .setMessage(steps)
+            .setPositiveButton("Uygulama bilgilerini aç") { _, _ ->
+                startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+            }
+            .setNegativeButton("Kapat", null)
+            .show()
     }
 
     private fun askBattery() {
