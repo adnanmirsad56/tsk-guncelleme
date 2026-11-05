@@ -46,4 +46,6 @@ android {
 dependencies {
     // 1.4: internet üzerinden SMS — köprüye WebSocket bağlantısı
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // 1.7: uygulama içinden QR okutma (Google kod tarayıcısı; kamera izni gerekmez)
+    implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
 }

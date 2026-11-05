@@ -107,13 +107,15 @@ class MainActivity : Activity() {
         // 1.4: internet üzerinden (telefon dükkân Wi-Fi'sinde olmasa da, mobil veride de)
         root.addView(text(17f, true).apply { text = "İnternet üzerinden (dükkân dışından)" })
         root.addView(text(13f, color = Color.rgb(148, 163, 184)).apply {
-            text = "En kolayı: TSK'da Ayarlar → SMS → 'Telefonu eşleştir' QR'ını bu telefonun KAMERASIYLA okutun ve " +
-                    "'TSK SMS ile aç' deyin — eşleşme, şifre ve başlatma kendiliğinden olur. Ya da oradaki bağlantıyı " +
+            text = "En kolayı: aşağıdaki '📷 QR okut'a basıp TSK'da Ayarlar → SMS → 'Telefonu eşleştir' QR'ını okutun " +
+                    "(ya da telefonun kamerasıyla okutup 'TSK SMS ile aç' deyin) — eşleşme, şifre ve başlatma " +
+                    "kendiliğinden olur. Ya da oradaki bağlantıyı " +
                     "(WhatsApp'la gelen) kopyalayıp aşağıdaki düğmeye basın. Telefon dükkân Wi-Fi'sinde olmasa da, mobil " +
                     "veride de SMS gider. Mesajlar uçtan uca şifrelidir."
         })
         remoteStatus = text(15f, true)
         root.addView(remoteStatus)
+        root.addView(button("📷 QR okut (TSK → Ayarlar → SMS → Telefonu eşleştir)") { scanQr() })
         root.addView(button("Bağlantıyı yapıştır (TSK'dan gelen)") { pasteRemote() })
         root.addView(button("Bağlantıyı elle gir") { typeRemote() })
         remoteRemove = button("İnternet bağlantısını kaldır") {
@@ -151,6 +153,24 @@ class MainActivity : Activity() {
         val data = i.dataString ?: return
         applyLink(data)
         i.data = null                                       // döndürünce ikinci kez uygulanmasın
+    }
+
+    /** 1.7: TSK'daki eşleştirme QR'ını uygulama içinden okutur (Google kod tarayıcısı; kamera izni istemez). */
+    private fun scanQr() {
+        val fail = { why: String ->
+            Toast.makeText(this, "QR okutulamadı ($why). Telefonun kendi kamerasıyla okutup 'TSK SMS ile aç'ı da " +
+                    "seçebilirsiniz.", Toast.LENGTH_LONG).show()
+        }
+        try {
+            val opts = com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions.Builder()
+                .setBarcodeFormats(com.google.mlkit.vision.barcode.common.Barcode.FORMAT_QR_CODE)
+                .build()
+            com.google.mlkit.vision.codescanner.GmsBarcodeScanning.getClient(this, opts).startScan()
+                .addOnSuccessListener { b -> applyLink(b.rawValue ?: "") }
+                .addOnFailureListener { e -> fail(e.message ?: "hata") }
+        } catch (e: Exception) {
+            fail(e.message ?: "tarayıcı yok")
+        }
     }
 
     private fun typeRemote() {
