@@ -88,8 +88,9 @@ object RemoteLink {
             return
         }
         state = "Bağlanıyor…"
+        // 1.9: köprü odaya girişte cihaz jetonu ister (dükkân anahtarından HMAC — tarayıcıyla aynı); yoksa 403
         val url = p.base.replaceFirst("https://", "wss://").replaceFirst("http://", "ws://").trimEnd('/') +
-                "/client?room=" + p.room
+                "/client?room=" + p.room + "&t=" + joinToken(p.key)
         val req = try {
             Request.Builder().url(url).header("User-Agent", "TSK SMS/$VERSION").build()
         } catch (e: Exception) {
@@ -128,7 +129,16 @@ object RemoteLink {
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                dropped(webSocket, if (response?.code == 400) "Bağlantı geçersiz" else "İnternet bağlantısı yok")
+                val code = response?.code ?: 0
+                val body = try { response?.body?.string()?.take(160) ?: "" } catch (_: Exception) { "" }
+                if (code == 403 || code == 429) backoff = maxOf(backoff, 300_000L)   // ret / sınır: sık deneme engel yemesin
+                dropped(webSocket, when {
+                    code == 400 -> "Bağlantı geçersiz"
+                    code == 403 -> "Köprü kabul etmedi" + (if (body.isNotBlank()) ": $body" else " (TSK'da QR'ı yeniden okutun)")
+                    code == 429 -> "Çok fazla deneme" + (if (body.isNotBlank()) ": $body" else "")
+                    code > 0 -> "Köprü hatası ($code)"
+                    else -> "İnternet bağlantısı yok"
+                })
             }
         })
     }
@@ -179,6 +189,18 @@ object RemoteLink {
         if (n.length > 6) n.take(n.length - 4).replace(Regex("\\d(?=\\d{3})"), "•") + n.takeLast(4) else n
 
     // -------------------------------------------------- uçtan uca şifre (TSK / telefon sayfasıyla aynı: IV 12 + AES-GCM)
+    /** Köprüye gösterilen jeton: base64url(HMAC-SHA256(dükkân anahtarı, "tsk-client-join")) — köprü yalnız özetini bilir. */
+    private fun joinToken(k0: String): String {
+        var k = k0
+        while (k.length % 4 != 0) k += "="
+        return try {
+            val raw = Base64.decode(k, Base64.URL_SAFE or Base64.NO_WRAP)
+            val mac = javax.crypto.Mac.getInstance("HmacSHA256")
+            mac.init(SecretKeySpec(raw, "HmacSHA256"))
+            Base64.encodeToString(mac.doFinal("tsk-client-join".toByteArray()), Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
+        } catch (_: Exception) { "" }
+    }
+
     private fun key(c: Context): SecretKeySpec? {
         var k = Store.remote(c)?.key ?: return null
         while (k.length % 4 != 0) k += "="
