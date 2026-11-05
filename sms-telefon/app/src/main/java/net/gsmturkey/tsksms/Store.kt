@@ -28,6 +28,11 @@ object Store {
         return pw
     }
 
+    /** 1.7: TSK'nın eşleştirme bağlantısındaki SMS şifresi (p=) telefona yazılır: iki tarafta aynı olur. */
+    fun setPassword(ctx: Context, pw: String) {
+        p(ctx).edit().putString("pass", pw).apply()
+    }
+
     fun port(ctx: Context): Int = p(ctx).getInt("port", DEFAULT_PORT)
 
     /** Bu kurulumun kalıcı kimliği: TSK telefonu ağda bulunca adresi değişse de aynı telefonu tanır. */
@@ -92,7 +97,7 @@ object Store {
         val link = text.substring(start).split(Regex("\\s")).first()
         val hash = link.indexOf('#')
         if (hash < 0) return null
-        val base = link.substring(0, hash).trimEnd('/')
+        val base = link.substring(0, hash).trimEnd('/').removeSuffix("/sms").trimEnd('/')    // 1.7: …/sms#… (QR)
         val params = link.substring(hash + 1).split("&").mapNotNull {
             val i = it.indexOf('=')
             if (i <= 0) null else it.substring(0, i) to try {
@@ -103,6 +108,22 @@ object Store {
         val key = params["k"] ?: return null
         if (!Regex("^[0-9a-f]{24}$").matches(room) || key.length < 20) return null
         return Remote(base, room, key, params["n"] ?: "")
+    }
+
+    /** 1.7: bağlantının '#' sonrasındaki bir alan (ör. p = SMS şifresi). */
+    fun linkParam(text: String, name: String): String? {
+        val start = text.indexOf("http")
+        if (start < 0) return null
+        val link = text.substring(start).split(Regex("\\s")).first()
+        val hash = link.indexOf('#')
+        if (hash < 0) return null
+        for (part in link.substring(hash + 1).split("&")) {
+            val i = part.indexOf('=')
+            if (i > 0 && part.substring(0, i) == name) {
+                return try { java.net.URLDecoder.decode(part.substring(i + 1), "UTF-8") } catch (_: Exception) { part.substring(i + 1) }
+            }
+        }
+        return null
     }
 
     fun count(ctx: Context): Int = p(ctx).getInt("sent", 0)

@@ -17,6 +17,7 @@ import android.provider.Settings
 import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -106,14 +107,15 @@ class MainActivity : Activity() {
         // 1.4: internet üzerinden (telefon dükkân Wi-Fi'sinde olmasa da, mobil veride de)
         root.addView(text(17f, true).apply { text = "İnternet üzerinden (dükkân dışından)" })
         root.addView(text(13f, color = Color.rgb(148, 163, 184)).apply {
-            text = "Telefon dükkân Wi-Fi'sinde değilken de SMS gönderilsin: TSK'da Ayarlar → Telefondan Erişim → " +
-                    "Uzaktan erişim → 'Adresi kopyala' ya da 'WhatsApp'la gönder' ile bağlantıyı bu telefona gönderin, " +
-                    "bağlantıyı kopyalayıp aşağıdaki düğmeye basın. Şifre TSK'daki SMS şifresiyle aynı olmalı. " +
-                    "Mesajlar uçtan uca şifrelidir."
+            text = "En kolayı: TSK'da Ayarlar → SMS → 'Telefonu eşleştir' QR'ını bu telefonun KAMERASIYLA okutun ve " +
+                    "'TSK SMS ile aç' deyin — eşleşme, şifre ve başlatma kendiliğinden olur. Ya da oradaki bağlantıyı " +
+                    "(WhatsApp'la gelen) kopyalayıp aşağıdaki düğmeye basın. Telefon dükkân Wi-Fi'sinde olmasa da, mobil " +
+                    "veride de SMS gider. Mesajlar uçtan uca şifrelidir."
         })
         remoteStatus = text(15f, true)
         root.addView(remoteStatus)
         root.addView(button("Bağlantıyı yapıştır (TSK'dan gelen)") { pasteRemote() })
+        root.addView(button("Bağlantıyı elle gir") { typeRemote() })
         remoteRemove = button("İnternet bağlantısını kaldır") {
             Store.setRemote(this, null)
             RemoteLink.stop()
@@ -134,6 +136,31 @@ class MainActivity : Activity() {
         root.addView(log)
         setContentView(ScrollView(this).apply { addView(root); setBackgroundColor(Color.rgb(15, 23, 42)) })
         if (!hasSmsPermission()) askPermissions()
+        handleLink(intent)
+    }
+
+    // 1.7: QR (kamera) ya da bağlantıya dokununca: https://app.tskservis.com/sms#r=…&k=…&n=…&p=…
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleLink(intent)
+    }
+
+    private fun handleLink(i: Intent?) {
+        if (i?.action != Intent.ACTION_VIEW) return
+        val data = i.dataString ?: return
+        applyLink(data)
+        i.data = null                                       // döndürünce ikinci kez uygulanmasın
+    }
+
+    private fun typeRemote() {
+        val box = EditText(this).apply { hint = "https://app.tskservis.com/sms#r=…" ; setSingleLine(false) }
+        AlertDialog.Builder(this)
+            .setTitle("TSK bağlantısı")
+            .setView(box)
+            .setPositiveButton("Eşleştir") { _, _ -> applyLink(box.text.toString()) }
+            .setNegativeButton("Vazgeç", null)
+            .show()
     }
 
     override fun onResume() {
@@ -232,16 +259,32 @@ class MainActivity : Activity() {
     private fun pasteRemote() {
         val cm = getSystemService(android.content.ClipboardManager::class.java)
         val clip = try { cm?.primaryClip?.getItemAt(0)?.coerceToText(this)?.toString() ?: "" } catch (_: Exception) { "" }
-        val r = Store.parseLink(clip)
+        applyLink(clip)
+    }
+
+    /** 1.7: bağlantıyı uygular — internet eşleşmesi + (varsa) TSK'nın SMS şifresi + gönderimi başlatma. */
+    private fun applyLink(text: String) {
+        val r = Store.parseLink(text)
         if (r == null) {
-            Toast.makeText(this, "Panoda TSK bağlantısı yok. TSK'dan gelen bağlantıyı (https://…#r=…&k=…) " +
-                    "kopyalayıp tekrar deneyin.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "TSK bağlantısı tanınmadı. TSK'da Ayarlar → SMS → 'Telefonu eşleştir' QR'ını okutun " +
+                    "ya da oradaki bağlantıyı (https://…#r=…&k=…) kopyalayıp tekrar deneyin.", Toast.LENGTH_LONG).show()
             return
         }
+        val pw = Store.linkParam(text, "p")
+        val pwChanged = pw != null && pw.length in 4..64 && pw != Store.password(this)
+        if (pw != null && pw.length in 4..64) Store.setPassword(this, pw)
         Store.setRemote(this, r)
-        if (Store.enabled(this)) RemoteLink.restart(this) else RemoteLink.stop()
+        if (Store.enabled(this)) {
+            if (pwChanged) { GatewayService.stop(this); GatewayService.start(this) }   // yerel ağdaki şifre de yenilensin
+            RemoteLink.restart(this)
+        } else if (hasSmsPermission()) {
+            toggleServer()                                  // başlatır (RemoteLink servisle birlikte açılır)
+            RemoteLink.restart(this)
+        } else {
+            askPermissions()
+        }
         Toast.makeText(this, "Eşleşti" + (if (r.shop.isNotEmpty()) ": ${r.shop}" else "") +
-                (if (Store.enabled(this)) "" else " — 'Başlat'a basın"), Toast.LENGTH_LONG).show()
+                (if (Store.enabled(this)) "" else " — SMS izni verip 'Başlat'a basın"), Toast.LENGTH_LONG).show()
         refresh()
     }
 

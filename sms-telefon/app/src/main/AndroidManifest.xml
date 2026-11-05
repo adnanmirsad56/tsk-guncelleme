@@ -31,6 +31,14 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- 1.7: TSK'daki 'Telefonu eşleştir' QR'ı telefonun kamerasıyla okutulunca bağlantı bu uygulamada açılır -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="app.tskservis.com" android:pathPrefix="/sms" />
+                <data android:scheme="https" android:host="tsk-relay.adnanmirsad56.workers.dev" android:pathPrefix="/sms" />
+            </intent-filter>
         </activity>
 
         <service
