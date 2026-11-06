@@ -382,8 +382,7 @@ class MainActivity : Activity() {
         address.text = "${localIp()}   port ${Store.port(this)}"
         val ln = Store.line(this)
         lineText.text = (if (ln.isEmpty()) "— (bulunamadı)" else LineNumber.pretty(ln)) +
-            (if (LineNumber.status.isNotEmpty() && !LineNumber.status.startsWith("✓")) "
-${LineNumber.status}" else "")
+            (if (LineNumber.status.isNotEmpty() && !LineNumber.status.startsWith("✓")) "\n" + LineNumber.status else "")
         creds.text = "Kullanıcı: ${Store.USER}     Şifre: ${Store.password(this)}"
         val perm = if (hasSmsPermission()) "" else "\n⚠ SMS izni verilmedi — 'İzinleri ver'e basın."
         log.text = "Gönderilen: ${Store.count(this)}$perm\n\n" + Store.logText(this)
