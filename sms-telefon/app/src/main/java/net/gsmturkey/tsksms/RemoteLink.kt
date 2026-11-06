@@ -39,7 +39,7 @@ object RemoteLink {
     private val rnd = SecureRandom()
     private var backoff = 5_000L
     private const val HELLO_MS = 30_000L
-    private const val VERSION = "1.4"
+    private const val VERSION = "1.10"
 
     private val client: OkHttpClient by lazy {
         OkHttpClient.Builder().pingInterval(25, TimeUnit.SECONDS).retryOnConnectionFailure(true).build()
@@ -156,11 +156,22 @@ object RemoteLink {
         }
     }
 
+    /** 1.10: numara bulununca TSK beklemeden öğrensin. */
+    fun helloNow() {
+        main.post { sendHello() }
+    }
+
     private fun sendHello() {
         val c = ctx ?: return
         val w = ws ?: return
-        send(c, w, JSONObject().put("t", "gw-hello").put("id", Store.deviceId(c))
-            .put("name", "${Build.MANUFACTURER} ${Build.MODEL}").put("ver", VERSION).put("pw", Store.password(c)))
+        // 1.10: yerel adres + port + kullanıcı + hattın numarası da gider — TSK (şifre doğruysa) Ayarlar → SMS'e
+        // kendisi yazar: elle adres / kullanıcı / şifre girmek gerekmez, dükkân numarası boşsa doldurulur.
+        val hello = JSONObject().put("t", "gw-hello").put("id", Store.deviceId(c))
+            .put("name", "${Build.MANUFACTURER} ${Build.MODEL}").put("ver", VERSION).put("pw", Store.password(c))
+            .put("port", Store.port(c)).put("user", Store.USER)
+        LineNumber.localIp()?.let { hello.put("ip", it) }
+        Store.line(c).takeIf { it.isNotEmpty() }?.let { hello.put("line", it) }
+        send(c, w, hello)
     }
 
     private fun handleSms(c: Context, w: WebSocket, job: JSONObject) {

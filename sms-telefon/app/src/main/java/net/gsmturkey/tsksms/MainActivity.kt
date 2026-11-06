@@ -41,6 +41,7 @@ class MainActivity : Activity() {
     private lateinit var updateText: TextView
     private lateinit var updateBtn: Button
     private lateinit var remoteRemove: Button
+    private lateinit var lineText: TextView
     private var recentSig = ""
     private val ui = Handler(Looper.getMainLooper())
     private val tick = object : Runnable {
@@ -78,7 +79,8 @@ class MainActivity : Activity() {
         root.addView(text(26f, true).apply { text = "TSK SMS"; gravity = Gravity.START })
         root.addView(text(14f, color = Color.rgb(148, 163, 184)).apply {
             text = "Dükkân programı (TSK) müşteriye SMS'i bu telefonun kendi hattından gönderir. " +
-                    "Aşağıdaki bilgileri TSK'da Ayarlar → SMS bölümüne yazın."
+                    "TSK'daki 'Telefonu eşleştir' QR'ını okutunca adres, kullanıcı, şifre ve bu hattın numarası " +
+                    "TSK'ya kendiliğinden gider (1.10) — elle yazmak gerekmez."
         })
         status = text(18f, true)
         address = text(22f, true, Color.rgb(96, 165, 250))
@@ -87,6 +89,12 @@ class MainActivity : Activity() {
         root.addView(text(13f, color = Color.rgb(148, 163, 184)).apply { text = "Telefon adresi (TSK'ya yazılacak)" })
         root.addView(address)
         root.addView(creds)
+        // 1.10: bu hattın numarası (TSK'da dükkân numarası boşsa oraya yazılır)
+        root.addView(text(13f, color = Color.rgb(148, 163, 184)).apply { text = "Bu hattın numarası (TSK'ya dükkân numarası olarak gider)" })
+        lineText = text(18f, true)
+        root.addView(lineText)
+        root.addView(button("Numarayı bul (SIM'den, olmazsa *101#)") { findLine(true) })
+        root.addView(button("Numarayı elle gir") { typeLine() })
         toggle = button("Başlat") { toggleServer() }
         root.addView(toggle)
         root.addView(button("İzinleri ver (SMS, telefon, bildirim)") { askPermissions() })
@@ -137,7 +145,7 @@ class MainActivity : Activity() {
         log = text(13f, color = Color.rgb(203, 213, 225))
         root.addView(log)
         setContentView(ScrollView(this).apply { addView(root); setBackgroundColor(Color.rgb(15, 23, 42)) })
-        if (!hasSmsPermission()) askPermissions()
+        if (!hasSmsPermission()) askPermissions() else autoLine()
         handleLink(intent)
     }
 
@@ -198,7 +206,8 @@ class MainActivity : Activity() {
 
     private fun askPermissions() {
         if (Build.VERSION.SDK_INT < 23) return
-        val want = mutableListOf(Manifest.permission.SEND_SMS, Manifest.permission.READ_PHONE_STATE)
+        val want = mutableListOf(Manifest.permission.SEND_SMS, Manifest.permission.READ_PHONE_STATE, Manifest.permission.CALL_PHONE)
+        if (Build.VERSION.SDK_INT >= 26) want.add(Manifest.permission.READ_PHONE_NUMBERS)
         if (Build.VERSION.SDK_INT >= 33) want.add(Manifest.permission.POST_NOTIFICATIONS)
         requestPermissions(want.toTypedArray(), 7)
     }
@@ -209,6 +218,49 @@ class MainActivity : Activity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == 7 && !hasSmsPermission()) showRestrictedHelp()
+        if (requestCode == 7 && Store.line(this).isEmpty()) autoLine()
+    }
+
+    /** 1.10: numara kayıtlı değilse kendiliğinden: SIM → (bir kez) *101#. */
+    private fun autoLine() {
+        if (Store.line(this).isNotEmpty()) return
+        val ussd = !Store.ussdTried(this)
+        if (ussd) Store.setUssdTried(this)
+        LineNumber.detect(this, ussd) { runOnUiThread { refresh() } }
+    }
+
+    private fun findLine(ussd: Boolean) {
+        if (Build.VERSION.SDK_INT >= 23 && checkSelfPermission(Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) {
+            askPermissions(); return
+        }
+        LineNumber.detect(this, ussd) { n ->
+            runOnUiThread {
+                refresh()
+                if (n == null) {
+                    Toast.makeText(this, "Numara bulunamadı (SIM'de yazılı değil, *101# yanıt vermedi). Elle girin.", Toast.LENGTH_LONG).show()
+                    typeLine()
+                }
+            }
+        }
+        refresh()
+    }
+
+    private fun typeLine() {
+        val box = EditText(this).apply {
+            hint = "05xx xxx xx xx"
+            inputType = android.text.InputType.TYPE_CLASS_PHONE
+            setText(Store.line(this@MainActivity).let { if (it.isEmpty()) "" else LineNumber.pretty(it) })
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Bu hattın numarası")
+            .setView(box)
+            .setPositiveButton("Kaydet") { _, _ ->
+                val n = LineNumber.parse(box.text.toString())
+                if (n == null) Toast.makeText(this, "Geçerli bir cep numarası yazın (05xx xxx xx xx).", Toast.LENGTH_LONG).show()
+                else { LineNumber.save(this, n, "elle"); refresh() }
+            }
+            .setNegativeButton("Vazgeç", null)
+            .show()
     }
 
     private fun showRestrictedHelp() {
@@ -328,6 +380,10 @@ class MainActivity : Activity() {
         status.setTextColor(if (on) Color.rgb(34, 197, 94) else Color.rgb(239, 68, 68))
         toggle.text = if (on) "Durdur" else "Başlat"
         address.text = "${localIp()}   port ${Store.port(this)}"
+        val ln = Store.line(this)
+        lineText.text = (if (ln.isEmpty()) "— (bulunamadı)" else LineNumber.pretty(ln)) +
+            (if (LineNumber.status.isNotEmpty() && !LineNumber.status.startsWith("✓")) "
+${LineNumber.status}" else "")
         creds.text = "Kullanıcı: ${Store.USER}     Şifre: ${Store.password(this)}"
         val perm = if (hasSmsPermission()) "" else "\n⚠ SMS izni verilmedi — 'İzinleri ver'e basın."
         log.text = "Gönderilen: ${Store.count(this)}$perm\n\n" + Store.logText(this)

@@ -126,6 +126,20 @@ object Store {
         return null
     }
 
+    /** 1.10: bu hattın numarası (10 hane, 5xx…) — TSK'ya 'dükkân numarası' olarak bildirilir. */
+    fun line(ctx: Context): String = p(ctx).getString("line", "") ?: ""
+
+    fun setLine(ctx: Context, n: String) {
+        p(ctx).edit().putString("line", n).apply()
+    }
+
+    /** 1.10: *101# bir kez kendiliğinden denenir (her açılışta USSD penceresi çıkmasın). */
+    fun ussdTried(ctx: Context): Boolean = p(ctx).getBoolean("ussd_tried", false)
+
+    fun setUssdTried(ctx: Context) {
+        p(ctx).edit().putBoolean("ussd_tried", true).apply()
+    }
+
     fun count(ctx: Context): Int = p(ctx).getInt("sent", 0)
 
     fun addCount(ctx: Context) {

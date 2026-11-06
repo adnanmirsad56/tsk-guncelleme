@@ -42,13 +42,13 @@ jobs:
         working-directory: sms-telefon
         env:
           SMS_KEYSTORE_PASS: ${{ secrets.SMS_KEYSTORE_PASS }}
-          SMS_VERSION_NAME: ${{ github.event.inputs.version || '1.9' }}
+          SMS_VERSION_NAME: ${{ github.event.inputs.version || '1.10' }}
           SMS_VERSION_CODE: ${{ github.run_number }}
         run: gradle --no-daemon assembleRelease
       - name: APK'yı ön sürüme koy
         env:
           GH_TOKEN: ${{ github.token }}
-          SMS_VERSION_NAME: ${{ github.event.inputs.version || '1.9' }}
+          SMS_VERSION_NAME: ${{ github.event.inputs.version || '1.10' }}
         run: |
           cp sms-telefon/app/build/outputs/apk/release/app-release.apk TSK-SMS.apk
           # 1.5: uygulamanın kendi kendini güncellemesi için sürüm bilgisi (derleme no = versionCode)
